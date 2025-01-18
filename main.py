@@ -11,7 +11,7 @@ from aiogram.client.default import DefaultBotProperties
 
 from handlers.game_action import router_game_action
 from handlers.standard_command import router_standard_command
-from middlewares.db import DatabaseMiddleware
+from middlewares.db_data import DatabaseMiddleware
 
 from keyboards.main_menu import set_main_menu
 
