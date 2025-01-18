@@ -1,15 +1,14 @@
 from aiogram.types import CallbackQuery
 
 
-async def get_alphabet(word: str, del_letter: str = None) -> dict[str, str]:
+async def get_alphabet(word: str, guessed_letter: str = None) -> dict[str, str]:
     alpha = {f'char_{chr(character)}_{word}': f'{chr(character)}' for character in range(ord('А'), ord('Е') + 1)}
     alpha.update({f'char_Ё_{word}': 'Ё'})
     alpha.update({f'char_{chr(character)}_{word}': f'{chr(character)}' for character in range(ord('Ж'), ord('Я') + 1)})
-    if del_letter is not None:
-        del_letter = del_letter.replace('_', '')
+    if guessed_letter is not None:
 
         for key in list(alpha.keys()):
-            if key.split('_')[1].lower() in del_letter:
+            if key.split('_')[1].lower() in guessed_letter:
                 alpha[f'{key}*'] = alpha.pop(key)
                 alpha = dict(sorted(alpha.items(), key=lambda x: x[1]))
 

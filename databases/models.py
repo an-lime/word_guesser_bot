@@ -8,7 +8,7 @@ from databases.base import Base
 class Users(Base):
     __tablename__ = 'users'
 
-    id_user: Mapped[str] = mapped_column(primary_key=True, autoincrement=True)
+    id_user: Mapped[str] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(nullable=False)
     win_points: Mapped[int] = mapped_column(nullable=False, default=0)
 
@@ -18,6 +18,51 @@ class Users(Base):
             user = Users(id_user=id_user, name=name)
             session.add(user)
         await session.commit()
+
+    async def update_user(self, id_user: str, points: int, session: AsyncSession) -> None:
+        user = await session.get(Users, id_user)
+        if user:
+            user.win_points += points
+        await session.commit()
+
+    async def show_users(self, id_user: str, session: AsyncSession) -> str:
+        user_place: str = 'Твоё место -- '
+        statement = select(func.row_number().over(order_by=Users.win_points.desc()), Users.win_points).where(
+            Users.id_user == id_user).order_by(
+            Users.win_points.desc())
+        result = await session.execute(statement)
+        place = result.one()
+        user_place += f'{str(place[0])} (Количество очков: {str(place[1])})\n\n'
+
+        final_list: str = 'Таблица лидеров:\n\n'
+        statement = select(
+            func.row_number().over(order_by=Users.win_points.desc()), Users.name, Users.win_points).order_by(
+            Users.win_points.desc()).limit(10)
+
+        result = await session.execute(statement)
+        users = result.all()
+        for user in users:
+            row_number = user[0]
+            model_user: Users = Users(name=user[1], win_points=user[2])
+
+            match row_number:
+                case 1:
+                    medal = '🥇'
+                case 2:
+                    medal = '🥈'
+                case 3:
+                    medal = '🥉'
+                case _:
+                    medal = '🏅'
+
+
+            final_list += f'{medal} {row_number}. {model_user.name}: (Очки: {model_user.win_points})\n\n'
+
+        await session.commit()
+
+        final_list = f'{user_place}\n{final_list}'
+
+        return final_list
 
 
 class Words(Base):

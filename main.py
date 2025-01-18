@@ -10,12 +10,13 @@ from config_data.config import BotConfig, load_config
 from aiogram.client.default import DefaultBotProperties
 
 from handlers.game_action import router_game_action
-from handlers.standard_command import router_standard_command
+from handlers.main_handler import router_standard_command
+from lexicon.lexicon import LEXICON_BOT_SETTING
 from middlewares.db_data import DatabaseMiddleware
 
 from keyboards.main_menu import set_main_menu
 
-logging.basicConfig(level=logging.INFO,
+logging.basicConfig(level=logging.WARNING,
                     format='%(filename)s: [%(funcName)s] %(lineno)d #%(levelname)-8s '
                            '[%(asctime)s] - %(name)s - %(message)s')
 
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 async def main():
-    logger.info('Bot started...')
+    logger.warning('Bot started...')
 
     config: BotConfig = load_config()
     engine = create_async_engine(url=config.db.url, echo=True)
@@ -33,6 +34,9 @@ async def main():
 
     bot: Bot = Bot(token=config.tgBot.token,
                    default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    await bot.set_my_description(LEXICON_BOT_SETTING['bot_description'])
+    await bot.set_my_short_description(LEXICON_BOT_SETTING['bot_short_description'])
+
     dp: Dispatcher = Dispatcher(storage=storage)
 
     await set_main_menu(bot=bot)
