@@ -27,36 +27,35 @@ class Users(Base):
 
     async def show_users(self, id_user: str, session: AsyncSession) -> str:
         user_place: str = 'Твоё место -- '
-        statement = select(func.row_number().over(order_by=Users.win_points.desc()), Users.win_points).where(
-            Users.id_user == id_user).order_by(
-            Users.win_points.desc())
-        result = await session.execute(statement)
-        place = result.one()
-        user_place += f'{str(place[0])} (Количество очков: {str(place[1])})\n\n'
 
         final_list: str = 'Таблица лидеров:\n\n'
         statement = select(
-            func.row_number().over(order_by=Users.win_points.desc()), Users.name, Users.win_points).order_by(
-            Users.win_points.desc()).limit(10)
+            func.row_number().over(order_by=Users.win_points.desc()), Users.id_user, Users.name,
+            Users.win_points).order_by(
+            Users.win_points.desc())
 
         result = await session.execute(statement)
         users = result.all()
         for user in users:
-            row_number = user[0]
-            model_user: Users = Users(name=user[1], win_points=user[2])
 
-            match row_number:
-                case 1:
-                    medal = '🥇'
-                case 2:
-                    medal = '🥈'
-                case 3:
-                    medal = '🥉'
-                case _:
-                    medal = '🏅'
+            if user[1] == id_user:
+                user_place += f'{str(user[0])} (Количество очков: {str(user[3])})\n\n'
 
+            if user[0] <= 10:
+                row_number = user[0]
+                model_user: Users = Users(name=user[2], win_points=user[3])
 
-            final_list += f'{medal} {row_number}. {model_user.name}: (Очки: {model_user.win_points})\n\n'
+                match row_number:
+                    case 1:
+                        medal = '🥇'
+                    case 2:
+                        medal = '🥈'
+                    case 3:
+                        medal = '🥉'
+                    case _:
+                        medal = '🏅'
+
+                final_list += f'{medal} {row_number}. {model_user.name}: (Очки: {model_user.win_points})\n\n'
 
         await session.commit()
 
