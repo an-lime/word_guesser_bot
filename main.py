@@ -16,7 +16,7 @@ from middlewares.db_data import DatabaseMiddleware
 
 from keyboards.main_menu import set_main_menu
 
-logging.basicConfig(level=logging.WARNING,
+logging.basicConfig(level=logging.INFO,
                     format='%(filename)s: [%(funcName)s] %(lineno)d #%(levelname)-8s '
                            '[%(asctime)s] - %(name)s - %(message)s')
 
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 async def main():
-    logger.warning('Bot started...')
+    logger.info('Bot started...')
 
     config: BotConfig = load_config()
     engine = create_async_engine(url=config.db.url, echo=True)
@@ -48,7 +48,6 @@ async def main():
 
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
-
 
 if __name__ == '__main__':
     asyncio.run(main())

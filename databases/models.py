@@ -21,7 +21,7 @@ class Users(Base):
 
     async def update_user(self, id_user: str, points: int, session: AsyncSession) -> None:
         user = await session.get(Users, id_user)
-        if user:
+        if user and points is not None:
             user.win_points += points
         await session.commit()
 

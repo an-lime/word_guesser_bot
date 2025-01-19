@@ -1,4 +1,5 @@
 from aiogram import Router, F
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import default_state
@@ -10,11 +11,13 @@ from filters.game_filter import check_word, IsGuessLetter
 from keyboards.game_button import create_inline_game_keyboard
 from lexicon.lexicon import LEXICON
 from middlewares.db_data import GameMiddleware
+from middlewares.throttling_middleware import ThrottlingMiddleware
 from services.change_data import get_alphabet, get_letter_from_callback, try_guess_letter
 from lexicon.body import display_hangman
 from states.botStates import BotStates
 
 router_game_action = Router()
+router_game_action.callback_query.outer_middleware(ThrottlingMiddleware())
 router_game_action.callback_query.middleware(GameMiddleware())
 
 
@@ -25,20 +28,15 @@ async def start_game(callback: CallbackQuery, hidden_word: Words, db: Database, 
     await state.update_data({'tries': 6})
     await state.update_data({'guessed_letters': ''})
 
-    del hidden_word
-    hidden_word: Words = await state.get_value('hidden_word')
-    word_completion: str = await state.get_value('word_completion')
-    tries: int = await state.get_value('tries')
-
     alphabet = await get_alphabet(word=hidden_word.word)
     keyboard = create_inline_game_keyboard(8, **alphabet)
 
     await db.user_in_game.add_game(id_user=str(callback.from_user.id), id_word=hidden_word.id_word, session=db.session)
 
     await callback.message.edit_text(
-        text=f'{display_hangman(tries)} \n'
+        text=f'{display_hangman(await state.get_value('tries'))} \n'
              f'{hidden_word.description} \n'
-             f'{word_completion} ',
+             f'{await state.get_value("word_completion")} ',
         reply_markup=keyboard
     )
     await state.set_state(BotStates.in_game)
@@ -51,27 +49,32 @@ async def try_start_game(callback: CallbackQuery):
 
 @router_game_action.callback_query(StateFilter(BotStates.in_game), IsGuessLetter())
 async def game_letter(callback: CallbackQuery, state: FSMContext, db: Database):
-    hidden_word: Words = await state.get_value('hidden_word')
-    word_completion: str = await state.get_value('word_completion')
-    tries: int = await state.get_value('tries')
-    guessed_letters: str = await state.get_value('guessed_letters')
-
     if callback.data[-1] == '*':
         await callback.answer()
         return
 
-    if check_word(word=hidden_word.word, callback=callback):
+    if check_word(word=(await state.get_value('hidden_word')).word, callback=callback):
 
-        guessed_letters += get_letter_from_callback(callback=callback).lower()
+        if get_letter_from_callback(callback=callback).lower() in await state.get_value('guessed_letters'):
+            return
 
-        if get_letter_from_callback(callback=callback).lower() in hidden_word.word.lower():
-            word_completion = try_guess_letter(letter=get_letter_from_callback(callback=callback).lower(),
-                                               word=hidden_word.word, word_completion=word_completion)
+        await state.update_data({'guessed_letters': await state.get_value('guessed_letters') + get_letter_from_callback(
+            callback=callback).lower()})
+        print(await state.get_value('guessed_letters'))
 
-            if LEXICON['hide_letter'] not in word_completion:
+        if get_letter_from_callback(callback=callback).lower() in (await state.get_value('hidden_word')).word.lower():
+            await state.update_data(
+                {'word_completion': try_guess_letter(letter=get_letter_from_callback(callback=callback).lower(),
+                                                     word=(await state.get_value('hidden_word')).word,
+                                                     word_completion=await state.get_value('word_completion'))})
+
+            if LEXICON['hide_letter'] not in await state.get_value('word_completion'):
+                await db.users.update_user(id_user=str(callback.from_user.id), points=await state.get_value('tries'),
+                                           session=db.session)
+                await db.user_in_game.stop_game(str(callback.from_user.id), session=db.session)
+
                 await callback.message.edit_text(f'{LEXICON['word_guessed']}\n'
-                                                 f'{word_completion}\n -- {hidden_word.description}')
-                await db.users.update_user(id_user=str(callback.from_user.id), points=tries, session=db.session)
+                                                 f'{await state.get_value('word_completion')}\n -- {(await state.get_value('hidden_word')).description}')
 
                 keyboard = create_inline_game_keyboard(1, 'start_game')
                 await callback.message.answer(text=LEXICON['start_new_game'],
@@ -80,20 +83,23 @@ async def game_letter(callback: CallbackQuery, state: FSMContext, db: Database):
                 return
 
         else:
-            tries -= 1
+            await state.update_data({'tries': await state.get_value('tries') - 1})
+            if await state.get_value('tries') < 0:
+                await state.update_data({'tries': 0})
 
             await callback.answer(LEXICON['wrong_letter'])
+        print(await state.get_value('tries'))
+        if await state.get_value('tries') == 0:
+            try:
+                await callback.message.edit_text(
+                    text=f'{display_hangman(await state.get_value('tries'))} \n'
+                         f'Загаданное слово -- {(await state.get_value("hidden_word")).word}\n\n'
+                         f'{(await state.get_value("hidden_word")).description} \n'
+                )
+            except TelegramBadRequest:
+                return await callback.answer()
 
-        await state.update_data({'tries': tries})
-        await state.update_data({'word_completion': word_completion})
-        await state.update_data({'guessed_letters': guessed_letters})
-
-        if tries == 0:
-            await callback.message.edit_text(
-                text=f'{display_hangman(tries)} \n'
-                     f'Загаданное слово -- {hidden_word.word}\n\n'
-                     f'{hidden_word.description} \n'
-            )
+            await db.user_in_game.stop_game(str(callback.from_user.id), session=db.session)
 
             keyboard = create_inline_game_keyboard(1, 'start_game')
             await callback.message.answer(text=LEXICON['start_new_game'],
@@ -101,14 +107,22 @@ async def game_letter(callback: CallbackQuery, state: FSMContext, db: Database):
             await state.clear()
             return
 
-        alphabet = await get_alphabet(word=hidden_word.word, guessed_letter=guessed_letters)
+        if await state.get_state() != BotStates.in_game:
+            return await callback.answer()
+
+        alphabet = await get_alphabet(word=(await state.get_value("hidden_word")).word,
+                                      guessed_letter=await state.get_value('guessed_letters'))
         keyboard = create_inline_game_keyboard(8, **alphabet)
-        await callback.message.edit_text(
-            text=f'{display_hangman(tries)} \n'
-                 f'{hidden_word.description} \n'
-                 f'{word_completion} ',
-            reply_markup=keyboard
-        )
+        try:
+            await callback.message.edit_text(
+                text=f'{display_hangman(await state.get_value('tries'))} \n'
+                     f'{(await state.get_value("hidden_word")).description} \n'
+                     f'{await state.get_value('word_completion')} ',
+                reply_markup=keyboard
+            )
+        except TelegramBadRequest:
+            return await callback.answer()
+
 
     else:
         await callback.answer(LEXICON['not_actual_game'])
