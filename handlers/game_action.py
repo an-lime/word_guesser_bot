@@ -60,7 +60,6 @@ async def game_letter(callback: CallbackQuery, state: FSMContext, db: Database):
 
         await state.update_data({'guessed_letters': await state.get_value('guessed_letters') + get_letter_from_callback(
             callback=callback).lower()})
-        print(await state.get_value('guessed_letters'))
 
         if get_letter_from_callback(callback=callback).lower() in (await state.get_value('hidden_word')).word.lower():
             await state.update_data(
@@ -88,7 +87,6 @@ async def game_letter(callback: CallbackQuery, state: FSMContext, db: Database):
                 await state.update_data({'tries': 0})
 
             await callback.answer(LEXICON['wrong_letter'])
-        print(await state.get_value('tries'))
         if await state.get_value('tries') == 0:
             try:
                 await callback.message.edit_text(
