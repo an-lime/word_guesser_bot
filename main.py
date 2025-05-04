@@ -1,20 +1,18 @@
 import asyncio
 import logging.config
-from aiogram import Bot, Dispatcher, F
+
+from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
-
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from config_data.config import BotConfig, load_config
-from aiogram.client.default import DefaultBotProperties
-
 from handlers.game_action import router_game_action
 from handlers.main_handler import router_standard_command
+from keyboards.main_menu import set_main_menu
 from lexicon.lexicon import LEXICON_BOT_SETTING
 from middlewares.db_data import DatabaseMiddleware
-
-from keyboards.main_menu import set_main_menu
 
 logging.basicConfig(level=logging.INFO,
                     format='%(filename)s: [%(funcName)s] %(lineno)d #%(levelname)-8s '

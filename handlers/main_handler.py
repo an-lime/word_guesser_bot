@@ -40,6 +40,10 @@ async def command_records(message: Message, db: Database):
     records = await db.users.show_users(id_user=str(message.from_user.id), session=db.session)
     await message.answer(records)
 
+@router_standard_command.message(Command(commands='help'), StateFilter(default_state))
+async def command_help(message: Message):
+    await message.answer(LEXICON['commands']['/help'])
+
 
 @router_standard_command.message()
 async def another_message(message: Message):
